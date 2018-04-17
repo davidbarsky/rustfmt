@@ -204,7 +204,7 @@ fn make_opts() -> Options {
     opts
 }
 
-fn execute(opts: &Options) -> FmtResult<Summary> {
+fn execute(opts: &Options, write_mode: &WriteMode) -> FmtResult<Summary> {
     let matches = opts.parse(env::args().skip(1))?;
 
     match determine_operation(&matches)? {
@@ -279,6 +279,12 @@ fn execute(opts: &Options) -> FmtResult<Summary> {
             if let Some(config_file) = config_path.as_ref() {
                 config = Config::from_toml_path(config_file.as_ref())?;
             };
+            if config.write_mode() != *write_mode {
+                println!(
+                    "Overriding WriteMode with config, {:?}",
+                    config.write_mode()
+                );
+            }
 
             if options.verbose {
                 if let Some(path) = config_path.as_ref() {
@@ -334,19 +340,22 @@ fn execute(opts: &Options) -> FmtResult<Summary> {
     }
 }
 
-fn main() {
-    env_logger::init();
-
-    let opts = make_opts();
+fn determine_write_mode(opts: &Options) -> WriteMode {
     let matches = opts.parse(env::args().skip(1)).unwrap();
     let options = CliOptions::from_matches(&matches).unwrap();
-    // Only handles arguments passed in, not through a configuration file.
-    let write_mode = match options.write_mode {
+    match options.write_mode {
         Some(m) => m,
         None => WriteMode::default(),
-    };
+    }
+}
 
-    let exit_code = match execute(&opts) {
+fn main() {
+    env_logger::init();
+    let opts = make_opts();
+    // Only handles arguments passed in through the CLI.
+    let mut write_mode = determine_write_mode(&opts);
+
+    let exit_code = match execute(&opts, &write_mode) {
         Ok(summary) => {
             if summary.has_operational_errors()
                 || summary.has_diff && write_mode == WriteMode::Check
